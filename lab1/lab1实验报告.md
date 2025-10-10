@@ -18,7 +18,7 @@
 ## 运行结果
 
 进入文件夹，使用make之后进行make qemu，得到：
-
+```
 OpenSBI v0.4 (Jul  2 2019 11:53:53)
    ____                    _____ ____ _____
   / __ \                  / ____|  _ \_   _|
@@ -29,6 +29,8 @@ OpenSBI v0.4 (Jul  2 2019 11:53:53)
         | |
         |_|
 
+```
+```
 Platform Name          : QEMU Virt Machine
 Platform HART Features : RV64ACDFIMSU
 Platform Max HARTs     : 8
@@ -40,7 +42,7 @@ Runtime SBI Version    : 0.1
 PMP0: 0x0000000080000000-0x000000008001ffff (A)
 PMP1: 0x0000000000000000-0xffffffffffffffff (A,R,W,X)
 (THU.CST) os is loading ...
-
+```
 ## 练习1：理解内核启动中的程序入口操作
 
 ### 指令分析
@@ -71,22 +73,21 @@ kern_init 函数共有内核初启的核心任务：
 通过GDB调试工具完整跟踪了系统启动过程：
 
 **初始状态检查**
-
+```
 (gdb) target remote localhost:1234
 0x8000000000001000 in ?? ()
-
+```
 系统从0x1000地址开始执行，这是RISC-V架构定义的复位向量位置。
 
 **复位指令分析**
-
+```
 (gdb) x/10i 0x1000
 0x1000: auipc   t0,0x0
 0x1004: addi    a1,t0,32
 0x1008: csrr    a0,mhartid
 0x100c: ld      t0,24(t0)
 0x1010: jr      t0
-
-
+```
 
 **练习二问题**
 
@@ -94,13 +95,13 @@ kern_init 函数共有内核初启的核心任务：
 
 
 前几条指令干了什么：
-
+```
 0x1000:      auipc   t0, 0x0           # 将当前PC的高20位与0相加，存入t0。t0 = 0x1000 + (0 << 12) = 0x1000
 0x1004:      addi    a1, t0, 32        # a1 = t0 + 32 = 0x1000 + 32 = 0x1020
 0x1008:      csrr    a0, mhartid       # 将当前硬件线程(Hart)的ID读取到寄存器a0
 0x100c:      ld      t0, 24(t0)        # 关键！从内存地址 (t0 + 24) = (0x1000 + 24) = 0x1018 处加载一个64位值到t0
 0x1010:      jr      t0                # 跳转到t0寄存器所指向的地址
-
+```
 复位代码完成以下功能：
 1. 设置运行环境和参数寄存器
 2. 读取当前CPU硬件线程ID
@@ -112,12 +113,14 @@ kern_init 函数共有内核初启的核心任务：
 ​​执行跳转​​：接下来的 jr t0指令使 CPU 开始执行 0x80000000处的代码，也就是 OpenSBI 固件。
 
 两个谜之操作：
-​​auipc t0, 0x0​​：是位置无关代码的关键，确保代码可重定位，没有直接mv的用法。
-​​csrr a0, mhartid​​：是函数调用的参数准备，遵循标准约定。
+
+- ​auipc t0, 0x0​​：是位置无关代码的关键，确保代码可重定位，没有直接mv的用法。
+
+- csrr a0, mhartid​​：是函数调用的参数准备，遵循标准约定。
 
 
 **设置断点**
-
+```
 (gdb) x/10i 0x1000
 => 0x1000:      auipc   t0,0x0
    0x1004:      addi    a1,t0,32
@@ -141,19 +144,23 @@ Continuing.
 Breakpoint 2, kern_entry () at kern/init/entry.S:7
 7           la sp, bootstacktop
 0
+```
 后面几句就是一些占位指令和伪指令。
 unimp可能是占位符或对齐填充。
 .insn 2, 0x8000可能是某种硬件初始化指令。
 
 随后，我们在0x1000设置断点，随后在0x8002000处设置断点，中间使用continue直接到达，随后输出
+```
 Breakpoint 2, kern_entry () at kern/init/entry.S:7
 7           la sp, bootstacktop
+```
 成功在0x80200000地址中断，确认控制权正确移交至内核。
 这一句的意思是将栈顶地址bootstacktop加载到sp寄存器中，为内核建立了运行所需的栈空间环境。随后自顶向下生长。
 
 
 
 **继续调试**
+```
 (gdb) si
 0x0000000080200004 in kern_entry () at kern/init/entry.S:7
 7           la sp, bootstacktop
@@ -162,13 +169,16 @@ Breakpoint 2, kern_entry () at kern/init/entry.S:7
 (gdb) si
 kern_init () at kern/init/init.c:8
 8           memset(edata, 0, end - edata);
-
+```
 可以看到开始调用kern_init函数，进入c语言编写的内核入口点。
 
 **寄存器展开的第二次调试**
+
 第一次调试忘记展开寄存器了，再来一次。
 寄存器初始状态全是0
+
 如下：
+```
 ra             0x0      0x0
 sp             0x0      0x0
 gp             0x0      0x0
@@ -261,23 +271,36 @@ pc             0x80000000       0x80000000
    0x80000046:  beq     t0,t2,0x8000014e
    0x8000004a:  auipc   t4,0x0
 (gdb)
+```
 作用:
+
 代码功能解析
+
 ​​1. 多核处理与主核确认​​
+```
 0x80000000: csrr a6, mhartid    # 读取当前硬件线程ID到a6
 0x80000004: bgtz a6, 0x80000108 # 如果不是0号核心(a6>0)，跳转到从核处理程序
+```
 ​​目的​​：区分主核（Hart 0）和从核（其他Hart）
+
 ​​策略​​：只有主核继续执行初始化，从核等待主核完成初始化后唤醒
+
 ​​2. 设置异常向量表​​
+```
 0x80000008: auipc t0, 0x0       # t0 = 当前PC值 (0x80000008)
 0x8000000c: addi t0, t0, 1032   # t0 = 0x80000008 + 1032 = 0x80000410
 0x80000010: auipc t1, 0x0       # t1 = 当前PC值 (0x80000010)  
 0x80000014: addi t1, t1, -16    # t1 = 0x80000010 - 16 = 0x80000000
 0x80000018: sd t1, 0(t0)        # 将0x80000000存入[0x80000410]
+```
 ​​目的​​：设置mtvec寄存器（异常处理入口）
+
 ​​效果​​：确保发生异常时跳转到0x80000000处理
+
 ​​3. 加载内存布局信息​​
+
 接下来的代码通过多次auipc/ld组合，加载关键的内存区域信息：
+```
 0x8000001c: auipc t0, 0x0       # t0 = 0x8000001c
 0x80000020: addi t0, t0, 1020   # t0 = 0x8000001c + 1020 = 0x80000418
 0x80000024: ld t0, 0(t0)        # 从[0x80000418]加载数据到t0
@@ -289,21 +312,26 @@ pc             0x80000000       0x80000000
 0x80000034: auipc t2, 0x0       # t2 = 0x80000034
 0x80000038: addi t2, t2, 988    # t2 = 0x80000034 + 988 = 0x80000410
 0x8000003c: ld t2, 0(t2)        # 从[0x80000410]加载数据到t2
+```
 ​​加载的内容通常是​​：
-t0：代码段起始地址
-t1：代码段结束地址
-t2：数据段起始地址
+- t0：代码段起始地址
+- t1：代码段结束地址
+- t2：数据段起始地址
+
 ​​4. 设置BSS段清零​​
+```
 0x80000040: sub t3, t1, t0      # 计算代码段长度
 0x80000044: add t3, t3, t2      # 加上数据段偏移
 0x80000046: beq t0, t2, 0x8000014e # 如果不需要清零，跳过后续
+```
 ​​目的​​：准备清零BSS段（未初始化数据段）
+
 ​​计算​​：确定需要清零的内存范围
 
 总结一下就是在干什么事呢？就是在加载OPENSBI的初始环境，确保能够正常运行。包括异常处理、内存布局、BSS段清零这些基础工作。
 
 继续进行完刚才的调试到达0x80200000，再展开得到：
-
+```
 (gdb) info registers
 ra             0x80000a02       0x80000a02
 sp             0x80203000       0x80203000 <SBI_CONSOLE_PUTCHAR>
@@ -338,22 +366,27 @@ t5             0x0      0
 t6             0x82200000       2183135232
 pc             0x8020000a       0x8020000a <kern_init>
 (gdb) x/10i $pc
+```
 目前从0x8020000进行了三部单步调试，现在pc指针在0x8020000a
-
+```
 (gdb) b *0x80200080
 Breakpoint 6 at 0x80200080: file kern/libs/stdio.c, line 43.
 (gdb) watch *0x80200080
 Hardware watchpoint 7: *0x80200080
 (gdb) c
 Continuing.
+```
 此时大屏幕上图标已经显现，只剩下“(THU.CST) os is loading ...”这句话没有输出。
+
 再随便打一个断点
+```
 Breakpoint 6, cprintf (fmt=fmt@entry=0x802004c8 "%s\n\n")
     at kern/libs/stdio.c:43
 43          return cnt;
 
 “(THU.CST) os is loading ...”已输出。
-
+```
+```
 (gdb) x/20i 0x80200000
 => 0x80200000 <kern_entry>:     auipc   sp,0x3
    0x80200004 <kern_entry+4>:   mv      sp,sp
@@ -376,6 +409,7 @@ Breakpoint 6, cprintf (fmt=fmt@entry=0x802004c8 "%s\n\n")
    0x8020003c <cputch>: addi    sp,sp,-32
    0x8020003e <cputch+2>:       sd      ra,24(sp)
 (gdb)
+```
 可以看到，0x802000a已经进入已进入kern_init函数，c语言的内容。而0x80200054是输出函数。
 
 
