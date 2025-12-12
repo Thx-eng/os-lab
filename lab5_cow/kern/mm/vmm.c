@@ -7,6 +7,7 @@
 #include <pmm.h>
 #include <riscv.h>
 #include <kmalloc.h>
+#include <proc.h>
 
 /*
   vmm design include two parts: mm_struct (mm) & vma_struct (vma)
@@ -400,9 +401,7 @@ int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
     }
 
     // 2. 检查权限：如果是写错误，但 VMA 不可写，则直接返回错误
-    // error_code 具体定义需参考 trap.c 的传参，通常：1=Instruction, 2=Load, 3=Store
-    // 这里我们假设 trap.c 传递了 cause 或者我们自行判断 flags
-    // 为简化，我们只关注 COW 逻辑：如果触发了 Store Page Fault (写错误)
+    // 如果触发了 Store Page Fault (写错误)
     
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
@@ -421,9 +420,7 @@ int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
     }
 
     // COW 处理逻辑：
-    // 如果页表项存在(PTE_V)，且被标记为 COW，且这是一次写操作(通常通过 trap 传入的 cause 判断，但在 lab5 框架中往往通过 error_code 隐含或上下文)
-    // 注意：trap.c 需要传递正确的 error_code。在 ucore lab5 中，error_code 往往包含 FLAGS。
-    // 我们这里严谨一点：如果 PTE 存在且有 PTE_COW，我们尝试解 COW。
+    // 如果页表项存在(PTE_V)，且被标记为 COW，且这是一次写操作
     
     if ((*ptep & PTE_V) && (*ptep & PTE_COW)) {
         struct Page *page = pte2page(*ptep);
@@ -459,17 +456,17 @@ int do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr)
             }
             // page_insert 内部已经 invalidate 好了，但为了保险
             tlb_invalidate(mm->pgdir, addr);
+            cprintf("COW: Copied page for pid %d at addr 0x%x\n", current->pid, addr);
             return 0;
         }
     }
 
-    // ... (这里省略了普通的缺页处理逻辑，如 page_alloc_page 等，Lab5 原始代码应该有，如果缺了需要补上) ...
     // 如果不是 COW，而是原本就没有映射（普通缺页），则分配新页
     if (*ptep == 0) {
         if (pgdir_alloc_page(mm->pgdir, addr, perm) == NULL) {
             return -E_NO_MEM;
         }
     }
-    
+
     return 0;
 }

@@ -232,8 +232,8 @@ void exception_handler(struct trapframe *tf)
         //cprintf("Store/AMO page fault\n");
         //break;
     {
-        // cprintf("Page fault at 0x%08x: %c\n", tf->tval, 
-        //         (tf->cause == CAUSE_STORE_PAGE_FAULT) ? 'W' : 'R');
+        cprintf("Page fault at 0x%08x: %c\n", tf->tval, 
+             (tf->cause == CAUSE_STORE_PAGE_FAULT) ? 'W' : 'R');
         
         if (current == NULL) {
              panic("unhandled page fault.\n");
@@ -247,7 +247,6 @@ void exception_handler(struct trapframe *tf)
         // 调用 do_pgfault
         // tf->tval 存放了出错的虚拟地址 (stval/mtval)
         // tf->cause 可以用来区分读写，这里简单透传或定义 error_code
-        // 在 x86 ucore 中 error_code 低位代表权限，这里我们可以自己约定
         uint32_t error_code = 0;
         if (tf->cause == CAUSE_STORE_PAGE_FAULT) {
             error_code |= 2; // 模拟 bit 1 为 write

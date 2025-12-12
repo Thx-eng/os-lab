@@ -476,7 +476,7 @@ int copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end,
             uint32_t perm = (*ptep & PTE_USER);
 
             // 核心逻辑：如果页面是可写的，或者已经是 COW 的，则需要标记为 COW 并共享
-            // 注意：只读页面(如代码段)不需要 COW，直接共享即可
+            // 只读页面(如代码段)不需要 COW，直接共享即可
             if ((perm & PTE_W) || (perm & PTE_COW)) {
                 // 清除写权限
                 perm &= ~PTE_W;
