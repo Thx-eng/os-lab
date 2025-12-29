@@ -731,7 +731,7 @@ Cannot find user-level thread for LWP 822: generic error
 (gdb)
 ```
 
-![图1](1.png)
+![图1](1.jpg)
 
 ### 4. 调试过程中的一些问题
 
