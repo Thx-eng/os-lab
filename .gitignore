@@ -1,0 +1,34 @@
+# Build outputs
+bin/
+obj/
+
+# Editor and IDE files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS and system files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Debug files
+*.d
+
+# QEMU and emulator files
+*.img
+*.iso
+
+# Compiled objects
+*.o
+*.a
+*.so
+
+# Backup files
+*.orig
