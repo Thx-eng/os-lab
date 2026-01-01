@@ -1,6 +1,7 @@
 # Build outputs
 bin/
 obj/
+disk0/
 
 # Editor and IDE files
 *.swp
