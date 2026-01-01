@@ -107,6 +107,18 @@ alloc_proc(void)
          *       uint32_t flags;                             // Process flag
          *       char name[PROC_NAME_LEN + 1];               // Process name
          */
+        proc->state = PROC_UNINIT;                   // 设置进程状态为未初始化
+        proc->pid = -1;                              // 未分配PID，初始化为-1
+        proc->runs = 0;                              // 运行时间为0
+        proc->kstack = 0;                            // 内核栈地址暂时为0，后续分配
+        proc->need_resched = 0;                      // 不需要调度
+        proc->parent = NULL;                         // 父进程为空
+        proc->mm = NULL;                             // 内存管理结构为空
+        memset(&(proc->context), 0, sizeof(struct context)); // 清空上下文变量
+        proc->tf = NULL;                             // 中断帧指针为空
+        proc->pgdir = boot_pgdir_pa;                 // 页目录表基址设置为内核页目录表基址
+        proc->flags = 0;                             // 标志位为0
+        memset(proc->name, 0, PROC_NAME_LEN + 1);    // 进程名清空
 
         // LAB5:填写你在lab5中实现的代码 (update LAB4 steps)已填写
         /*
@@ -114,6 +126,8 @@ alloc_proc(void)
          *       uint32_t wait_state;                        // waiting state
          *       struct proc_struct *cptr, *yptr, *optr;     // relations between processes
          */
+        proc->wait_state = 0;
+        proc->cptr = proc->yptr = proc->optr = NULL;
 
         // LAB6:填写你在lab6中实现的代码 (update LAB5 steps)已填写
         /*
@@ -265,6 +279,39 @@ void proc_run(struct proc_struct *proc)
         *   lcr3():                   Modify the value of CR3 register
         *   switch_to():              Context switching between two processes
         */
+    if (proc != current)
+    {
+        // LAB4:EXERCISE3 2310412
+        /*
+         * Some Useful MACROs, Functions and DEFINEs, you can use them in below implementation.
+         * MACROs or Functions:
+         *   local_intr_save():        Disable interrupts
+         *   local_intr_restore():     Enable Interrupts
+         *   lsatp():                   Modify the value of satp register
+         *   switch_to():              Context switching between two processes
+         */
+        bool intr_flag;
+        local_intr_save(intr_flag);
+
+        struct proc_struct *prev = current;
+
+        /* 切换当前进程指针 */
+        current = proc;
+        /* 统计运行次数（可选，但常见） */
+        proc->runs++;
+
+        /* 切换页表（若 proc->pgdir 为内核/空页表，lsatp 要与实现保持一致） */
+        lsatp(proc->pgdir);
+
+        /*
+         * 上下文切换：switch_to 保存 prev 的 context 并恢复 proc 的 context
+         * switch_to 的声明：switch_to(struct context *from, struct context *to);
+         */
+        switch_to(&prev->context, &proc->context);
+
+        local_intr_restore(intr_flag);
+    }
+
     //LAB8 YOUR CODE : (update LAB4 steps)
       /*
        * below fields(add in LAB6) in proc_struct need to be initialized
@@ -522,6 +569,40 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
      *   proc_list:    the process set's list
      *   nr_process:   the number of process set
      */
+    proc = alloc_proc();
+    if (proc == NULL)
+        goto fork_out;
+
+    if (setup_kstack(proc) != 0)
+        goto bad_fork_cleanup_proc;
+
+    /* 基本初始化 */
+    proc->pid = get_pid();
+    proc->parent = current;
+    current->wait_state = 0;
+    proc->runs = 0;
+    proc->need_resched = 0;
+    proc->mm = NULL;
+    proc->flags = 0;
+    proc->state = PROC_UNINIT;
+
+    /* 按要求复制或共享内存管理 */
+    if (copy_mm(clone_flags, proc) != 0)
+        goto bad_fork_cleanup_kstack;
+
+    /* 在新的内核栈上设置中断帧和上下文 */
+    copy_thread(proc, stack, tf);
+
+    /* 添加到哈希表和全局进程列表 */
+    hash_proc(proc);
+    //list_add(&proc_list, &proc->list_link);
+    set_links(proc);
+
+    /* 使该进程可运行 */
+    wakeup_proc(proc);
+
+    //nr_process++;
+    ret = proc->pid;
 
     //    1. call alloc_proc to allocate a proc_struct
     //    2. call setup_kstack to allocate a kernel stack for child process
