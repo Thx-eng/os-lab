@@ -33,3 +33,7 @@ Thumbs.db
 
 # Backup files
 *.orig
+
+# input/output files
+*.in
+*.out
