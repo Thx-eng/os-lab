@@ -152,8 +152,8 @@ alloc_proc(void)
         proc->lab6_run_pool.left = proc->lab6_run_pool.right = proc->lab6_run_pool.parent = NULL;
         proc->lab6_stride = 0;
         proc->lab6_priority = 0;
-
-        
+        // LAB8: 初始化 filesp
+        proc->filesp = NULL;
     }
     return proc;
 }
@@ -279,6 +279,9 @@ void proc_run(struct proc_struct *proc)
 
         /* 切换页表（若 proc->pgdir 为内核/空页表，lsatp 要与实现保持一致） */
         lsatp(proc->pgdir);
+        
+        /* LAB8: 切换页表后立即刷新 TLB，确保使用新页表 */
+        flush_tlb();
 
         /*
          * 上下文切换：switch_to 保存 prev 的 context 并恢复 proc 的 context
@@ -579,30 +582,27 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
     proc->flags = 0;
     proc->state = PROC_UNINIT;
 
+    /* LAB8: 复制文件结构 - 必须在 copy_mm 之前或同时进行 */
+    if (copy_files(clone_flags, proc) != 0)
+    {
+        goto bad_fork_cleanup_kstack;
+    }
+
     /* 按要求复制或共享内存管理 */
     if (copy_mm(clone_flags, proc) != 0)
-        goto bad_fork_cleanup_kstack;
+        goto bad_fork_cleanup_fs;
 
     /* 在新的内核栈上设置中断帧和上下文 */
     copy_thread(proc, stack, tf);
 
     /* 添加到哈希表和全局进程列表 */
     hash_proc(proc);
-    //list_add(&proc_list, &proc->list_link);
     set_links(proc);
 
     /* 使该进程可运行 */
     wakeup_proc(proc);
 
-    //nr_process++;
     ret = proc->pid;
-
-
-    
-    if (copy_files(clone_flags, proc) != 0)
-    { // for LAB8
-        goto bad_fork_cleanup_kstack;
-    }
     
 fork_out:
     return ret;
