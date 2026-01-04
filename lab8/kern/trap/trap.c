@@ -197,12 +197,33 @@ void exception_handler(struct trapframe *tf)
         break;
     case CAUSE_FETCH_PAGE_FAULT:
         cprintf("Instruction page fault\n");
+        print_trapframe(tf);
+        if (trap_in_kernel(tf)) {
+            panic("unhandled page fault in kernel.\n");
+        } else {
+            cprintf("killed by kernel.\n");
+            do_exit(-E_KILLED);
+        }
         break;
     case CAUSE_LOAD_PAGE_FAULT:
         cprintf("Load page fault\n");
+        print_trapframe(tf);
+        if (trap_in_kernel(tf)) {
+            panic("unhandled page fault in kernel.\n");
+        } else {
+            cprintf("killed by kernel.\n");
+            do_exit(-E_KILLED);
+        }
         break;
     case CAUSE_STORE_PAGE_FAULT:
         cprintf("Store/AMO page fault\n");
+        print_trapframe(tf);
+        if (trap_in_kernel(tf)) {
+            panic("unhandled page fault in kernel.\n");
+        } else {
+            cprintf("killed by kernel.\n");
+            do_exit(-E_KILLED);
+        }
         break;
     default:
         print_trapframe(tf);
